@@ -66,10 +66,46 @@ import Control.Exception
 %left '*'
 %%
 
-Top  : ID '=' Expr                 { $3 }
-     | Expr                        { $1 }
+Top  : ID '=' Expr                            { $3 }
+     | Expr                                   { $1 }
 
-Expr : TNUM                        { EInt $1 }
+Expr : let ID  '=' Expr in Expr               { ELet $2 $4 $6 }
+     | let ID IDS '=' Expr in Expr            { ELet $2 (mkLam $3 $5) $7 }
+     | '\\' ID '->' Expr                      { ELam $2 $4 }
+     | if Expr then Expr else Expr            { EIf $2 $4 $6 }
+     | Expr '||' Expr                         { EBin Or $1 $3 }
+     | Expr '&&' Expr                         { EBin And $1 $3 }
+     | Expr '==' Expr                         { EBin Eq $1 $3 }
+     | Expr '/=' Expr                         { EBin Ne $1 $3 }
+     | Expr '<' Expr                          { EBin Lt $1 $3 }
+     | Expr '<=' Expr                         { EBin Le $1 $3 }
+     | ListItems                              { $1 }
+
+ListItems: '['']'                             { ENil }
+      | ExprCont ':' ListItems                { EBin Cons $1 $3 }
+      | '[' ListItems                         { $2 }
+      | ListItems ']'                         { EBin Cons $1 ENil }
+      | ExprCont ',' ListItems                { EBin Cons $1 $3 }
+      | ExprCont                              { $1 }
+
+ExprCont: ExprCont '+' ExprCont               { EBin Plus $1 $3 }
+     | ExprCont '-' ExprCont                  { EBin Minus $1 $3 }
+     | Mult                                   { $1 }
+
+Mult : Mult '*' Value                         { EBin Mul $1 $3 }
+     | Function                               { $1 }
+
+Function : Function Value                     { EApp $1 $2 }
+         | Value                              { $1 }
+
+Value : '(' Expr ')'                          { $2 }
+     | TNUM                                   { EInt $1 }
+     | true                                   { EBool True }
+     | false                                  { EBool False }
+     | ID                                     { EVar $1 }
+
+IDS : ID                                      { [$1] }
+    | ID IDS                                  { $1:$2 } 
 
 {
 mkLam :: [Id] -> Expr -> Expr

@@ -165,12 +165,50 @@ exitError (Error msg) = return (VErr msg)
 --------------------------------------------------------------------------------
 eval :: Env -> Expr -> Value
 --------------------------------------------------------------------------------
-eval = error "TBD:eval"
+eval _ (EInt n) = VInt n
+eval _ (EBool b) = VBool b
+eval env (EVar x) = lookupId x env
+eval env (EBin op e1 e2) = evalOp op (eval env e1) (eval env e2)
+eval env (EIf cond e1 e2) =
+  case eval env cond of
+    VBool True -> eval env e1
+    VBool False -> eval env e2
+    _ -> throw (Error "type error: expected bool")
+eval env (ELet x e1 e2) =
+  case e1 of
+    ELam x' e -> eval ((x, VRec x env x' e) : env) e2
+    _ -> eval ((x, eval env e1) : env) e2
+eval env (ELam x e) = VClos env x e
+eval env (EApp e1 e2) =
+    let value = eval env e2
+    in case eval env e1 of
+      VClos env' x' body -> eval ((x', value) : env') body
+      VRec f env' x' body -> eval ((f, VRec f env' x' body) : (x', value) : env') body
+      VPrim f -> f value
+      _ -> throw (Error "type error: expected a function")
+eval _ ENil = VNil
 
 --------------------------------------------------------------------------------
 evalOp :: Binop -> Value -> Value -> Value
 --------------------------------------------------------------------------------
-evalOp = error "TBD:evalOp"
+evalOp Plus (VInt x) (VInt y) = VInt (x + y)
+evalOp Minus (VInt x) (VInt y) = VInt (x - y)
+evalOp Mul (VInt x) (VInt y) = VInt (x * y)
+evalOp Eq (VInt x) (VInt y) = VBool (x == y)
+evalOp Eq (VBool x) (VBool y) = VBool (x == y)
+evalOp Eq VNil VNil = VBool True
+evalOp Eq (VCons x xs) (VCons y ys) = VBool (x == y && evalOp Eq xs ys == VBool True)
+evalOp Eq _ _ = VBool False
+evalOp Ne (VInt x) (VInt y) = VBool (x /= y)
+evalOp Ne (VBool x) (VBool y) = VBool (x /= y)
+evalOp Ne VNil VNil = VBool False
+evalOp Ne (VCons x xs) (VCons y ys) = VBool (x /= y || evalOp Ne xs ys == VBool True)
+evalOp Lt (VInt x) (VInt y) = VBool (x < y)
+evalOp Le (VInt x) (VInt y) = VBool (x <= y)
+evalOp And (VBool x) (VBool y) = VBool (x && y)
+evalOp Or (VBool x) (VBool y) = VBool (x || y)
+evalOp Cons x y = VCons x y
+evalOp _ _ _ = throw (Error "type error: binop")
 
 --------------------------------------------------------------------------------
 -- | `lookupId x env` returns the most recent
@@ -189,12 +227,16 @@ evalOp = error "TBD:evalOp"
 --------------------------------------------------------------------------------
 lookupId :: Id -> Env -> Value
 --------------------------------------------------------------------------------
-lookupId = error "TBD:lookupId"
+lookupId x [] = throw (Error ("unbound variable: " ++ x))
+lookupId x ((name, val) : env)
+    | x == name = val
+    | otherwise = lookupId x env
 
 prelude :: Env
-prelude =
-  [ -- HINT: you may extend this "built-in" environment
-    -- with some "operators" that you find useful...
+prelude = 
+  [
+    ("head", VPrim(\(VCons x _) -> x)), 
+    ("tail", VPrim(\(VCons _ y) -> y))
   ]
 
 env0 :: Env
